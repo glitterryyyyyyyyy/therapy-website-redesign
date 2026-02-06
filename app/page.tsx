@@ -1,4 +1,184 @@
+"use client";
+
 import Image from "next/image";
+import React from "react";
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReduced(mq.matches);
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+
+  return reduced;
+}
+
+type HeroImageLensProps = {
+  src: string;
+  alt: string;
+  priority?: boolean;
+};
+
+function HeroImageLens({ src, alt, priority }: HeroImageLensProps) {
+  const reducedMotion = usePrefersReducedMotion();
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
+  const rafId = React.useRef<number | null>(null);
+  const last = React.useRef({ x: 50, y: 50, active: false });
+
+  const [pos, setPos] = React.useState({ x: 50, y: 50, active: false });
+  const [hasInteracted, setHasInteracted] = React.useState(false);
+
+  const scheduleSet = React.useCallback((next: typeof last.current) => {
+    last.current = next;
+    if (rafId.current != null) return;
+    rafId.current = window.requestAnimationFrame(() => {
+      rafId.current = null;
+      setPos({ ...last.current });
+    });
+  }, []);
+
+  const onMove = React.useCallback(
+    (e: React.PointerEvent) => {
+      if (!wrapRef.current) return;
+      const rect = wrapRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      if (!hasInteracted) setHasInteracted(true);
+      scheduleSet({ x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)), active: true });
+    },
+    [scheduleSet, hasInteracted]
+  );
+
+  const onLeave = React.useCallback(() => {
+    scheduleSet({ ...last.current, active: false });
+  }, [scheduleSet]);
+
+  React.useEffect(() => {
+    return () => {
+      if (rafId.current != null) window.cancelAnimationFrame(rafId.current);
+    };
+  }, []);
+
+  const lensSize = reducedMotion ? 0 : pos.active ? 180 : 0; // px
+  const lens = `radial-gradient(circle ${lensSize}px at ${pos.x}% ${pos.y}%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 75%)`;
+
+  return (
+    <div
+      ref={wrapRef}
+      className="relative h-full w-full"
+      onPointerMove={reducedMotion ? undefined : onMove}
+      onPointerEnter={reducedMotion ? undefined : onMove}
+      onPointerLeave={reducedMotion ? undefined : onLeave}
+    >
+      {/* Base image (slightly softened = 'chaos') */}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        priority={priority}
+        className="object-cover object-center scale-105 group-hover:scale-100 transition-transform duration-[1.5s] ease-[cubic-bezier(0.19,1,0.22,1)]"
+        style={{ filter: reducedMotion ? undefined : "saturate(0.98) contrast(1.02) blur(1.8px)", transformOrigin: "center" }}
+      />
+
+      {/* Clarity layer (revealed under lens) */}
+      {!reducedMotion && (
+        <div
+          className="absolute inset-0"
+          aria-hidden="true"
+          style={{
+            WebkitMaskImage: lens,
+            maskImage: lens,
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            WebkitMaskSize: "100% 100%",
+            maskSize: "100% 100%",
+            transition: "-webkit-mask-image 120ms ease-out, mask-image 120ms ease-out",
+          }}
+        >
+          <Image
+            src={src}
+            alt=""
+            fill
+            className="object-cover object-center"
+            style={{ filter: "contrast(1.08) saturate(1.02)", transform: "scale(1.02)" }}
+          />
+          {/* Tiny highlight ring to make the lens feel intentional */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(circle 200px at var(--x) var(--y), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.10) 18%, rgba(255,255,255,0) 55%)",
+              opacity: pos.active ? 1 : 0,
+              transition: "opacity 220ms ease",
+              ...( { "--x": `${pos.x}%`, "--y": `${pos.y}%` } as React.CSSProperties ),
+            }}
+          />
+        </div>
+      )}
+
+      {/* Grain + vignette polish */}
+      <div className="absolute inset-0 hero-grain" aria-hidden="true" />
+      <div className="absolute inset-0 hero-vignette" aria-hidden="true" />
+
+      {/* Subtle focus ring (no copy, just a premium affordance) */}
+      {!reducedMotion && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          aria-hidden="true"
+          style={{
+            opacity: pos.active ? 1 : 0,
+            transition: "opacity 220ms ease",
+          }}
+        >
+          <div
+            className="absolute"
+            style={{
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+              transform: "translate(-50%, -50%)",
+              width: 210,
+              height: 210,
+              borderRadius: 9999,
+              border: "1px solid rgba(255,255,255,0.38)",
+              boxShadow: "0 0 0 10px rgba(0,0,0,0.12), 0 18px 55px rgba(0,0,0,0.25)",
+              background:
+                "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.06) 18%, rgba(255,255,255,0) 52%)",
+            }}
+          />
+        </div>
+      )}
+
+      {/* One-time affordance (non-verbal; fades once the user interacts) */}
+      {!reducedMotion && !hasInteracted && (
+        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+          {/* soft corner arcs */}
+          <div className="absolute left-5 top-5 h-10 w-10 rounded-[14px] border border-white/22 bg-white/8 backdrop-blur-md" />
+          <div
+            className="absolute left-7 top-7 h-6 w-6 rounded-full"
+            style={{
+              border: "1px solid rgba(255,255,255,0.22)",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+            }}
+          />
+
+          {/* tiny shimmer dot (subtle motion cue) */}
+          <div
+            className="hero-image-hint absolute left-7 top-7 h-1.5 w-1.5 rounded-full bg-white/70"
+            style={{
+              animation: "heroHintPulse 2.6s ease-in-out infinite",
+              filter: "drop-shadow(0 0 10px rgba(255,255,255,0.35))",
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   return (
@@ -62,7 +242,7 @@ export default function Home() {
       </header>
 
       {/* 2. Hero section (Ethereal & Premium) */}
-  <section className="relative min-h-[90vh] flex items-center bg-[#FAF8F4] overflow-hidden">
+  <section className="relative min-h-[calc(100vh-72px)] flex items-center bg-[#FAF8F4] overflow-hidden">
         {/* Abstract Fluid Background */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-40 mix-blend-multiply">
             {/* Warm blob */}
@@ -71,7 +251,7 @@ export default function Home() {
             <div className="absolute bottom-[-10%] right-[-10%] w-[1200px] h-[1200px] bg-[radial-gradient(circle,rgba(58,56,54,0.08)_0%,rgba(58,56,54,0)_70%)] blur-[120px]" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-6 py-20 md:py-32 flex flex-col md:flex-row items-center gap-16 md:gap-32 relative z-10 w-full">
+  <div className="max-w-7xl mx-auto px-6 py-16 md:py-24 flex flex-col md:flex-row items-center gap-12 md:gap-24 relative z-10 w-full">
           <div className="md:w-[45%]">
             <div className="inline-flex items-center gap-3 px-4 py-1.5 mb-10 border border-[#161514]/6 rounded-full bg-white/35 backdrop-blur-md shadow-sm">
                 <span className="relative flex h-2 w-2">
@@ -81,14 +261,14 @@ export default function Home() {
                 <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#5D6C68]">Accepting New Clients</span>
             </div>
             
-            <h1 className="text-6xl md:text-8xl font-light tracking-[-0.04em] leading-[0.98] [font-family:var(--font-cormorant)] text-[#161514] mb-8 max-w-xl">
+            <h1 className="text-5xl md:text-7xl font-light tracking-[-0.035em] leading-[0.98] [font-family:var(--font-cormorant)] text-[#161514] mb-6 max-w-lg">
               Find clarity in <br/>
               <span className="italic text-[#A66A4A] relative inline-block">
                 the chaos.
               </span>
             </h1>
             
-            <p className="text-xl md:text-2xl font-light leading-relaxed text-[#3A3836]/70 max-w-md [font-family:var(--font-cormorant)]">
+            <p className="text-lg md:text-xl font-light leading-relaxed text-[#3A3836]/70 max-w-md [font-family:var(--font-cormorant)]">
               Compassionate, evidence‑based therapy for high‑achieving adults. Reclaim your calm in Santa Monica.
             </p>
 
@@ -107,8 +287,8 @@ export default function Home() {
              {/* Abstract organic shape decoration */}
              <div className="absolute -top-12 -right-12 w-64 h-64 border border-[#A66A4A]/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-1000 delay-100" />
             
-            <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[20px] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.10)] transition-all duration-1000 hover:shadow-[0_55px_130px_-25px_rgba(166,106,74,0.18)] bg-[#E8E6E1]">
-              <Image src="/office1.jpeg" alt="Sleek modern therapy office" fill className="object-cover object-center scale-105 group-hover:scale-100 transition-transform duration-[1.5s] ease-[cubic-bezier(0.19,1,0.22,1)]" priority />
+            <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[20px] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.10)] transition-all duration-1000 hover:shadow-[0_55px_130px_-25px_rgba(166,106,74,0.18)] bg-[#E8E6E1] max-h-[calc(100vh-200px)]">
+              <HeroImageLens src="/office1.jpeg" alt="Sleek modern therapy office" priority />
             </div>
             
             {/* Floating Info card */}
