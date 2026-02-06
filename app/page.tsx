@@ -64,8 +64,7 @@ function HeroImageLens({ src, alt, priority }: HeroImageLensProps) {
     };
   }, []);
 
-  const lensSize = reducedMotion ? 0 : pos.active ? 180 : 0; // px
-  const lens = `radial-gradient(circle ${lensSize}px at ${pos.x}% ${pos.y}%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 75%)`;
+  // No “clear/blur reveal” effect — user asked to remove the hover-to-clear interaction.
 
   return (
     <div
@@ -75,57 +74,17 @@ function HeroImageLens({ src, alt, priority }: HeroImageLensProps) {
       onPointerEnter={reducedMotion ? undefined : onMove}
       onPointerLeave={reducedMotion ? undefined : onLeave}
     >
-      {/* Base image (slightly softened = 'chaos') */}
+      {/* Base image (always crisp — no hover zoom / no blur) */}
       <Image
         src={src}
         alt={alt}
         fill
         priority={priority}
-        className="object-cover object-center scale-105 group-hover:scale-100 transition-transform duration-[1.5s] ease-[cubic-bezier(0.19,1,0.22,1)]"
-        style={{ filter: reducedMotion ? undefined : "saturate(0.98) contrast(1.02) blur(1.8px)", transformOrigin: "center" }}
+        className="object-cover object-center"
+        style={{ transformOrigin: "center" }}
       />
 
-      {/* Clarity layer (revealed under lens) */}
-      {!reducedMotion && (
-        <div
-          className="absolute inset-0"
-          aria-hidden="true"
-          style={{
-            WebkitMaskImage: lens,
-            maskImage: lens,
-            WebkitMaskRepeat: "no-repeat",
-            maskRepeat: "no-repeat",
-            WebkitMaskSize: "100% 100%",
-            maskSize: "100% 100%",
-            transition: "-webkit-mask-image 120ms ease-out, mask-image 120ms ease-out",
-          }}
-        >
-          <Image
-            src={src}
-            alt=""
-            fill
-            className="object-cover object-center"
-            style={{ filter: "contrast(1.08) saturate(1.02)", transform: "scale(1.02)" }}
-          />
-          {/* Tiny highlight ring to make the lens feel intentional */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(circle 200px at var(--x) var(--y), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.10) 18%, rgba(255,255,255,0) 55%)",
-              opacity: pos.active ? 1 : 0,
-              transition: "opacity 220ms ease",
-              ...( { "--x": `${pos.x}%`, "--y": `${pos.y}%` } as React.CSSProperties ),
-            }}
-          />
-        </div>
-      )}
-
-      {/* Grain + vignette polish */}
-      <div className="absolute inset-0 hero-grain" aria-hidden="true" />
-      <div className="absolute inset-0 hero-vignette" aria-hidden="true" />
-
-      {/* Subtle focus ring (no copy, just a premium affordance) */}
+      {/* Subtle pointer-follow highlight (no sharpening / clearing) */}
       {!reducedMotion && (
         <div
           className="absolute inset-0 pointer-events-none"
@@ -133,49 +92,18 @@ function HeroImageLens({ src, alt, priority }: HeroImageLensProps) {
           style={{
             opacity: pos.active ? 1 : 0,
             transition: "opacity 220ms ease",
+            background:
+              "radial-gradient(circle 220px at var(--x) var(--y), rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.08) 18%, rgba(255,255,255,0) 58%)",
+            ...( { "--x": `${pos.x}%`, "--y": `${pos.y}%` } as React.CSSProperties ),
           }}
-        >
-          <div
-            className="absolute"
-            style={{
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              transform: "translate(-50%, -50%)",
-              width: 210,
-              height: 210,
-              borderRadius: 9999,
-              border: "1px solid rgba(255,255,255,0.38)",
-              boxShadow: "0 0 0 10px rgba(0,0,0,0.12), 0 18px 55px rgba(0,0,0,0.25)",
-              background:
-                "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.06) 18%, rgba(255,255,255,0) 52%)",
-            }}
-          />
-        </div>
+        />
       )}
 
-      {/* One-time affordance (non-verbal; fades once the user interacts) */}
-      {!reducedMotion && !hasInteracted && (
-        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          {/* soft corner arcs */}
-          <div className="absolute left-5 top-5 h-10 w-10 rounded-[14px] border border-white/22 bg-white/8 backdrop-blur-md" />
-          <div
-            className="absolute left-7 top-7 h-6 w-6 rounded-full"
-            style={{
-              border: "1px solid rgba(255,255,255,0.22)",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
-            }}
-          />
+      {/* Grain + vignette polish */}
+      <div className="absolute inset-0 hero-grain" aria-hidden="true" />
+      <div className="absolute inset-0 hero-vignette" aria-hidden="true" />
 
-          {/* tiny shimmer dot (subtle motion cue) */}
-          <div
-            className="hero-image-hint absolute left-7 top-7 h-1.5 w-1.5 rounded-full bg-white/70"
-            style={{
-              animation: "heroHintPulse 2.6s ease-in-out infinite",
-              filter: "drop-shadow(0 0 10px rgba(255,255,255,0.35))",
-            }}
-          />
-        </div>
-      )}
+      {/* (Removed) Visible circle / affordance UI — user requested no ring overlay. */}
     </div>
   );
 }
